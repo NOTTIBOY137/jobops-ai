@@ -3,6 +3,8 @@ import { getCurrentUser } from '@/lib/auth'
 import { getApplicationWithDetails } from '@/lib/applications'
 import ApplicationDetail from '@/components/ApplicationDetail'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ApplicationPage({
   params
 }: {

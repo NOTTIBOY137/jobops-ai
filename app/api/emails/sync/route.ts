@@ -10,6 +10,8 @@ import {
 } from '@/lib/gmail'
 import { google } from 'googleapis'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()

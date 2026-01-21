@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getMasterResume, parseJobDescription, tailorResumeWithLLM, generateResumeFiles, saveResumeVersion } from '@/lib/resume'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()

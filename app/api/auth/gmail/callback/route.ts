@@ -3,6 +3,8 @@ import { getCurrentUser, saveIntegration, createOrUpdateProfile } from '@/lib/au
 import { google } from 'googleapis'
 import { createGmailClient, createJobOpsLabel } from '@/lib/gmail'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
