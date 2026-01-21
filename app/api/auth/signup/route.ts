@@ -14,10 +14,15 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient()
     
-    // Sign up user
+    // Sign up user (trigger will automatically create profile)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          name: name || email.split('@')[0] // Pass name in metadata for trigger
+        }
+      }
     })
     
     if (authError) throw authError
@@ -25,8 +30,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
     }
     
-    // Create profile
-    await createOrUpdateProfile(authData.user.id, email, { name })
+    // Update profile with name if provided (trigger creates it, but may not have name)
+    if (name) {
+      try {
+        await createOrUpdateProfile(authData.user.id, email, { name })
+      } catch (profileError) {
+        // Profile might already exist from trigger, that's okay
+        console.log('Profile update note:', profileError)
+      }
+    }
     
     return NextResponse.json({ 
       user: authData.user,
