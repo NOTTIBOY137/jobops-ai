@@ -111,7 +111,7 @@ export function extractEmailContent(message: GmailMessage): {
 
 export function detectEmailType(subject: string, body: string): {
   type: 'applied' | 'confirmation' | 'interview' | 'rejection' | 'assessment' | 'offer' | 'other'
-  stage?: 'applied' | 'in_review' | 'screening' | 'interview' | 'rejected'
+  stage?: 'applied' | 'in_review' | 'screening' | 'interview' | 'offer' | 'rejected'
 } {
   const text = `${subject} ${body}`.toLowerCase()
   
