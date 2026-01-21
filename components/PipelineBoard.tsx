@@ -2,7 +2,23 @@
 
 import { useState } from 'react'
 import { Application, ApplicationStage } from '@/lib/types/database'
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const stages: ApplicationStage[] = [
   'interested',
@@ -39,32 +55,82 @@ interface PipelineBoardProps {
   onUpdate: () => void
 }
 
+interface SortableItemProps {
+  app: Application
+}
+
+function SortableItem({ app }: SortableItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: app.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:shadow-md transition-shadow">
+        <a href={`/applications/${app.id}`} className="block">
+          <h4 className="font-medium text-gray-900">{app.company}</h4>
+          <p className="text-sm text-gray-600 mt-1">{app.role}</p>
+          {app.location && (
+            <p className="text-xs text-gray-500 mt-1">{app.location}</p>
+          )}
+          <p className="text-xs text-gray-400 mt-2">
+            {new Date(app.last_activity_at).toLocaleDateString()}
+          </p>
+        </a>
+      </div>
+    </div>
+  )
+}
+
 export default function PipelineBoard({ applications, onUpdate }: PipelineBoardProps) {
   const [apps, setApps] = useState(applications)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   function getApplicationsForStage(stage: ApplicationStage): Application[] {
     return apps.filter(app => app.stage === stage)
   }
 
-  async function handleDragEnd(result: DropResult) {
-    if (!result.destination) return
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
 
-    const { draggableId, destination } = result
-    const newStage = destination.droppableId as ApplicationStage
+    if (!over || active.id === over.id) return
+
+    // Find the source and destination stages
+    const sourceApp = apps.find(app => app.id === active.id)
+    const destStage = over.id as ApplicationStage
+
+    if (!sourceApp || sourceApp.stage === destStage) return
 
     // Update local state optimistically
     setApps(prev => prev.map(app => 
-      app.id === draggableId 
-        ? { ...app, stage: newStage }
+      app.id === active.id 
+        ? { ...app, stage: destStage }
         : app
     ))
 
     // Update in database
     try {
-      const response = await fetch(`/api/applications/${draggableId}`, {
+      const response = await fetch(`/api/applications/${active.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: newStage })
+        body: JSON.stringify({ stage: destStage })
       })
 
       if (!response.ok) {
@@ -86,64 +152,40 @@ export default function PipelineBoard({ applications, onUpdate }: PipelineBoardP
         <h2 className="text-xl font-semibold text-gray-900">Pipeline</h2>
       </div>
       
-      <DragDropContext onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <div className="flex overflow-x-auto p-6 space-x-4">
-          {stages.map(stage => (
-            <Droppable key={stage} droppableId={stage}>
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={`flex-shrink-0 w-64 ${
-                    snapshot.isDraggingOver ? 'bg-gray-50' : ''
-                  }`}
-                >
-                  <div className="mb-3">
-                    <h3 className="text-sm font-medium text-gray-700">
-                      {stageLabels[stage]}
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {getApplicationsForStage(stage).length} applications
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-2 min-h-[200px]">
-                    {getApplicationsForStage(stage).map((app, index) => (
-                      <Draggable key={app.id} draggableId={app.id} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`bg-white rounded-lg shadow-sm p-4 border border-gray-200 hover:shadow-md transition-shadow ${
-                              snapshot.isDragging ? 'shadow-lg' : ''
-                            }`}
-                          >
-                            <a
-                              href={`/applications/${app.id}`}
-                              className="block"
-                            >
-                              <h4 className="font-medium text-gray-900">{app.company}</h4>
-                              <p className="text-sm text-gray-600 mt-1">{app.role}</p>
-                              {app.location && (
-                                <p className="text-xs text-gray-500 mt-1">{app.location}</p>
-                              )}
-                              <p className="text-xs text-gray-400 mt-2">
-                                {new Date(app.last_activity_at).toLocaleDateString()}
-                              </p>
-                            </a>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
+          {stages.map(stage => {
+            const stageApps = getApplicationsForStage(stage)
+            return (
+              <div key={stage} className="flex-shrink-0 w-64">
+                <div className="mb-3">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    {stageLabels[stage]}
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    {stageApps.length} applications
+                  </span>
                 </div>
-              )}
-            </Droppable>
-          ))}
+                
+                <SortableContext
+                  items={stageApps.map(app => app.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2 min-h-[200px]">
+                    {stageApps.map((app) => (
+                      <SortableItem key={app.id} app={app} />
+                    ))}
+                  </div>
+                </SortableContext>
+              </div>
+            )
+          })}
         </div>
-      </DragDropContext>
+      </DndContext>
     </div>
   )
 }
